@@ -30,6 +30,11 @@ def validar_senha():
     dados = request.get_json()
     if dados.get('senha') == SENHA_MESTRE:
         sistema_desbloqueado = True
+        
+        # --- NOVO: Avisa o ESP32 para desbloquear o ecrã OLED ---
+        mqtt_client.publish(MQTT_TOPIC, "DESBLOQUEAR")
+        # --------------------------------------------------------
+        
         return jsonify({"status": "sucesso"})
     return jsonify({"status": "erro"}), 401
 
@@ -74,6 +79,11 @@ def api_bloquear():
     if senha_digitada == SENHA_MESTRE:
         sistema_desbloqueado = False
         print("[SISTEMA] Sistema Bloqueado.")
+        
+        # --- NOVO: Avisa o ESP32 para trancar o ecrã OLED ---
+        mqtt_client.publish(MQTT_TOPIC, "BLOQUEAR")
+        # ----------------------------------------------------
+        
         return jsonify({"status": "sucesso"})
     else:
         return jsonify({"status": "erro", "mensagem": "Senha Incorreta"}), 401
