@@ -103,6 +103,12 @@ def api_alterar_senha():
     # Atualiza a senha no sistema
     SENHA_MESTRE = nova_senha
     print(f"[SISTEMA] Senha mestre alterada para: {SENHA_MESTRE}")
+    
+    # --- ADICIONE ESTA LINHA PARA AVISAR A ESP32 ---
+    mqtt_client.publish(MQTT_TOPIC, f"SENHA {SENHA_MESTRE}")
+    # -----------------------------------------------
+
+    return jsonify({"status": "sucesso"})
     return jsonify({"status": "sucesso"})
 
 if __name__ == '__main__':
