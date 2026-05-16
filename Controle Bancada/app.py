@@ -1,5 +1,17 @@
 from flask import Flask, request, jsonify, render_template
 import os
+import paho.mqtt.client as mqtt
+
+# --- CONFIGURAÇÃO MQTT ---
+# Usando um broker público e gratuito para facilitar.
+MQTT_BROKER = "broker.hivemq.com"
+MQTT_PORT = 1883
+MQTT_TOPIC = "meu_esp32_c3_supermini/comandos"
+
+mqtt_client = mqtt.Client()
+mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+mqtt_client.loop_start()
+# -------------------------
 
 app = Flask(__name__, template_folder='.', static_folder='.', static_url_path='')
 
@@ -39,6 +51,7 @@ def api_ligar():
     segundos = dados.get('segundos')
     print(f"[COMANDO] Ligar relé por {minutos} min e {segundos} seg.")
     # No futuro, aqui vai o código MQTT que envia a mensagem pro ESP32
+    mqtt_client.publish(MQTT_TOPIC, f"ligar:{minutos}:{segundos}")
     return jsonify({"status": "ligado"})
 
 @app.route('/api/desligar', methods=['POST'])
@@ -48,6 +61,7 @@ def api_desligar():
     
     print("[COMANDO] Desligar relé.")
     # No futuro, aqui vai o código MQTT que manda o ESP32 parar
+    mqtt_client.publish(MQTT_TOPIC, "desligar")
     return jsonify({"status": "desligado"})
 
 @app.route('/api/bloquear', methods=['POST'])
