@@ -18,7 +18,7 @@ int senha[4] = {0, 0, 0, 0};
 int senhaCorreta = 0;
 int errouSenha = 0;
 int estadoSenha = 0;
-int minutos = 10;
+int minutos = 0;
 int segundos = 0;
 int estado = 0;
 int estadoLigado = 0;
@@ -145,7 +145,7 @@ void loop() {
           desenharTela();
         }
       }
-      delay(50);
+      
       //Senha confirmada
       else if(senhaCorreta == 1){
         if(tempoPressionado >= 10000){
@@ -159,7 +159,7 @@ void loop() {
           desenharTela();
         }
         else if (tempoPressionado >= 4000) { 
-          estadoLigado = !estadoLigado;
+          estadoLigado = 1;
           if(estadoLigado == 1) tempoSegundosAnterior = millis();
           desenharTela();
         }
@@ -181,6 +181,7 @@ void loop() {
         if(senha[estadoSenha] > 9) senha[estadoSenha] = 0;
         if(senha[estadoSenha] < 0) senha[estadoSenha] = 9;
         ultimoTempoGiro = millis();
+        delay(50);
         desenharTela();
       }
     }
@@ -207,6 +208,7 @@ void loop() {
             if(segundos < 0) segundos = 59;
           }
           ultimoTempoGiro = millis();
+          delay(50);
           desenharTela();
         }
       }
@@ -219,6 +221,7 @@ void loop() {
         digitalWrite(led, LOW);
         digitalWrite(buzzer, LOW);
         estadoLigado = 0;
+        minutos = 10;
       }
       else{
         digitalWrite(rele, HIGH);
