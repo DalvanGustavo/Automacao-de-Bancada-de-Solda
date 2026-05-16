@@ -107,12 +107,19 @@ void desenharTela() {
 
 // --- FUNÇÃO QUE RECEBE COMANDOS DA WEB ---
 void callback(char* topic, byte* payload, unsigned int length) {
-  String msg;
+  String msg = "";
   for (int i = 0; i < length; i++) {
     msg += (char)payload[i];
   }
   
-  // Se o comando for para LIGAR e atualizar o TEMPO
+  // Limpa caracteres ocultos que fazem o código falhar
+  msg.trim(); 
+  
+  Serial.print("Mensagem Limpa Recebida: [");
+  Serial.print(msg);
+  Serial.println("]");
+
+  // 1. Comando para LIGAR o relé
   if (msg.startsWith("LIGAR")) {
     int espaco1 = msg.indexOf(' ');
     int espaco2 = msg.lastIndexOf(' ');
@@ -120,14 +127,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
       minutos = msg.substring(espaco1 + 1, espaco2).toInt();
       segundos = msg.substring(espaco2 + 1).toInt();
       
-      senhaCorreta = 1; // Desbloqueia a tela física
+      senhaCorreta = 1; // Desbloqueia
       estadoLigado = 1; // Liga o relé
       tempoSegundosAnterior = millis();
       digitalWrite(rele, HIGH);
       desenharTela();
     }
   } 
-  // Se o comando for para DESLIGAR
+  // 2. Comando para DESLIGAR o relé
   else if (msg == "DESLIGAR") {
     estadoLigado = 0;
     minutos = 10;
@@ -137,9 +144,30 @@ void callback(char* topic, byte* payload, unsigned int length) {
     digitalWrite(buzzer, LOW);
     desenharTela();
   }
-  // Se o comando for para atualizar a SENHA (Ex: "SENHA 1234")
+  
+  // --- NOVO: Comando apenas para DESBLOQUEAR O ECRÃ ---
+  else if (msg == "DESBLOQUEAR") {
+    senhaCorreta = 1; // Salta a verificação da palavra-passe física
+    estadoLigado = 0; // Mantém o relé desligado, vai para edição de tempo
+    desenharTela();
+  }
+  // --- NOVO: Comando para TRANCAR TUDO (Bloquear) ---
+  else if (msg == "BLOQUEAR") {
+    senhaCorreta = 0; // Volta a pedir palavra-passe
+    estadoLigado = 0;
+    minutos = 10;
+    segundos = 0;
+    digitalWrite(rele, LOW);
+    digitalWrite(led, LOW);
+    digitalWrite(buzzer, LOW);
+    for(int i = 0; i < 4; i++){ senha[i] = 0; }
+    estadoSenha = 0;
+    desenharTela();
+  }
+  
+  // 3. Comando para atualizar a SENHA MESTRA
   else if (msg.startsWith("SENHA ")) {
-    String novaSenha = msg.substring(6); // Pega os 4 dígitos
+    String novaSenha = msg.substring(6); 
     if(novaSenha.length() >= 4) {
       senhaMestra[0] = novaSenha.charAt(0) - '0';
       senhaMestra[1] = novaSenha.charAt(1) - '0';
@@ -153,8 +181,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 // --- FUNÇÃO PARA CONECTAR NO MQTT SEM TRAVAR O CÓDIGO ---
 void conectarMQTT() {
-  if (millis() - ultimoTentoMQTT > 5000) {
+  // Tenta conectar apenas a cada 10 segundos para não congelar o modo manual
+  if (millis() - ultimoTentoMQTT > 10000) {
+    Serial.println("Tentando conectar ao MQTT...");
     if (client.connect("ESP32_C3_TimerClient")) {
+      Serial.println("MQTT Conectado!");
       client.subscribe(topic_comandos);
     }
     ultimoTentoMQTT = millis();
@@ -162,7 +193,7 @@ void conectarMQTT() {
 }
 
 void setup() {
-  Serial.begin(115200); // Adicionado para debugar no monitor serial
+  Serial.begin(115200); 
   Wire.begin(i2c_sda, i2c_scl);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
     for(;;);
@@ -174,24 +205,42 @@ void setup() {
   pinMode(rele, OUTPUT);
   pinMode(led, OUTPUT);
   estadoUltimoCLK = digitalRead(clk);
-  desenharTela();
+  
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 10);
+  display.println("Iniciando...");
+  display.display();
 
-  // --- CONFIGURAÇÃO WI-FI E MQTT ---
+  // --- CONFIGURAÇÃO WI-FI PARA NÃO TRAVAR O MODO MANUAL ---
   WiFiManager wm;
-  wm.autoConnect("ESP32_Config");
+  // Se não conectar no Wi-Fi em 60 segundos, ele desiste e vai pro modo manual offline
+  wm.setConfigPortalTimeout(60); 
+  
+  if (!wm.autoConnect("ESP32_Config")) {
+    Serial.println("Falha ao conectar no WiFi. Entrando no modo Manual Offline.");
+  } else {
+    Serial.println("WiFi Conectado!");
+  }
   
   client.setServer(mqtt_broker, mqtt_port);
   client.setCallback(callback);
+  
+  desenharTela();
 }
 
 void loop() {
 
-  // --- MANTER CONEXÃO WEB ATIVA ---
-  if (!client.connected()) {
-    conectarMQTT();
+  // --- MANTER CONEXÃO WEB APENAS SE TIVER INTERNET ---
+  // Se o Wi-Fi cair, ignoramos o MQTT e o modo manual voa liso!
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!client.connected()) {
+      conectarMQTT();
+    }
+    client.loop();
   }
-  client.loop();
-  // --------------------------------
+  // ----------------------------------------------------
   
   int estadoAtualBotao = digitalRead(sw);
 
@@ -266,7 +315,7 @@ void loop() {
         if(senha[estadoSenha] < 0) senha[estadoSenha] = 9;
         ultimoTempoGiro = millis();
       }
-      delay(10); // Reduzido para melhorar o MQTT
+      delay(10);
       desenharTela();
     }
     estadoUltimoCLK = estadoAtualCLK;
@@ -292,7 +341,7 @@ void loop() {
             if(segundos < 0) segundos = 59;
           }
           ultimoTempoGiro = millis();
-          delay(10); // Reduzido para melhorar o MQTT
+          delay(10);
           desenharTela();
         }
       }
