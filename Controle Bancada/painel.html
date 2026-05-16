@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Controle</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="box">
+        <span class="borderLine"></span>
+        <div class="consultar painel-container">
+            <h2>Controle de Tempo</h2>
+
+            <div class="display-relogio" id="display-tempo">10:00</div>
+
+            <div class="config-tempo" id="area-config">
+                <div class="input-grupo">
+                    <label>Minutos</label>
+                    <input type="text" inputmode="numeric" maxlength="2" id="input-min" value="10">
+                </div>
+                <span class="dois-pontos">:</span>
+                <div class="input-grupo">
+                    <label>Segundos</label>
+                    <input type="text" inputmode="numeric" maxlength="2" id="input-sec" value="00">
+                </div>
+            </div>
+
+            <div class="botoes-container">
+                <button id="btn-ligar" class="btn-acao btn-verde">LIGAR RELÉ</button>
+                <button id="btn-desligar" class="btn-acao btn-vermelho" style="display: none;">DESLIGAR</button>
+            </div>
+
+            <div class="botoes-container mt-lock">
+                <button id="btn-abrir-alterar" class="btn-acao btn-cinza">🔑 Alterar Senha</button>
+                <button id="btn-bloquear" class="btn-acao btn-cinza">🔒 Bloquear Sistema</button>
+            </div>
+        </div>
+    </div>
+    <div id="modal-bloqueio" class="modal-escondido">
+        <div class="modal-conteudo">
+            <h3>Confirmar Bloqueio</h3>
+            <p>Digite a senha para trancar o sistema:</p>
+
+            <div class="pin-container">
+                <input type="password" class="pin-box pin-box-lock" maxlength="1">
+                <input type="password" class="pin-box pin-box-lock" maxlength="1">
+                <input type="password" class="pin-box pin-box-lock" maxlength="1">
+                <input type="password" class="pin-box pin-box-lock" maxlength="1">
+            </div>
+
+            <div class="botoes-container">
+                <button id="btn-confirmar-bloqueio" class="btn-acao btn-vermelho">Trancar</button>
+                <button id="btn-cancelar-bloqueio" class="btn-acao btn-cinza">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-alterar-senha" class="modal-escondido">
+        <div class="modal-conteudo">
+            <h3 style="color: #45f3ff;">Alterar Senha</h3>
+
+            <div class="input-grupo alteracao-grupo">
+                <label>Senha Atual</label>
+                <input type="password" id="input-senha-atual" maxlength="4" inputmode="numeric" placeholder="****">
+            </div>
+
+            <div class="input-grupo alteracao-grupo" style="margin-top: 15px;">
+                <label>Nova Senha</label>
+                <input type="password" id="input-nova-senha" maxlength="4" inputmode="numeric" placeholder="****">
+            </div>
+
+            <div class="botoes-container" style="margin-top: 25px;">
+                <button id="btn-confirmar-alteracao" class="btn-acao btn-verde">Salvar</button>
+                <button id="btn-cancelar-alteracao" class="btn-acao btn-cinza">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="painel.js"></script>
+</body>
+
+</html>
