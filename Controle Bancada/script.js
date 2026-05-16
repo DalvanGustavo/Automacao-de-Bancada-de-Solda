@@ -69,4 +69,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    // Verifica a cada 1 segundo se alguém desbloqueou o ESP32 fisicamente
+    setInterval(() => {
+        fetch('/api/status')
+        .then(res => res.json())
+        .then(data => {
+            // Se desbloqueou no físico, entra no site automático!
+            if(data.desbloqueado) {
+                window.location.href = "/painel";
+            }
+        })
+        .catch(err => console.log("Aguardando servidor..."));
+    }, 1000);
 });

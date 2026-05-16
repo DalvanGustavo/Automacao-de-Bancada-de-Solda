@@ -184,4 +184,36 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+    // Verifica a cada 1 segundo como estão as coisas no ESP32 físico
+    setInterval(() => {
+        fetch('/api/status')
+        .then(res => res.json())
+        .then(data => {
+            // Se alguém bloqueou no físico, o site expulsa o usuário de volta pro Login
+            if(!data.desbloqueado) {
+                window.location.href = "/";
+                return;
+            }
+
+            // Sincroniza os botões (Ligar/Desligar)
+            if(data.ligado) {
+                document.getElementById('btn-ligar').style.display = 'none';
+                document.getElementById('btn-desligar').style.display = 'inline-block';
+            } else {
+                document.getElementById('btn-ligar').style.display = 'inline-block';
+                document.getElementById('btn-desligar').style.display = 'none';
+            }
+
+            // Sincroniza o relógio (só atualiza se o usuário não estiver com o mouse clicado digitando algo)
+            if (document.activeElement !== document.getElementById('input-min') && document.activeElement !== document.getElementById('input-sec')) {
+                let m = data.minutos.toString().padStart(2, '0');
+                let s = data.segundos.toString().padStart(2, '0');
+                
+                document.getElementById('input-min').value = m;
+                document.getElementById('input-sec').value = s;
+                document.getElementById('display-tempo').innerText = `${m}:${s}`;
+            }
+        })
+        .catch(err => console.log("Aguardando servidor..."));
+    }, 1000);
 });

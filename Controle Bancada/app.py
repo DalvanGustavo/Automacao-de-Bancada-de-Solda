@@ -2,21 +2,47 @@ from flask import Flask, request, jsonify, render_template
 import os
 import paho.mqtt.client as mqtt
 
-# --- CONFIGURAÇÃO MQTT ---
-# Usando um broker público e gratuito para facilitar.
-MQTT_BROKER = "broker.hivemq.com"
-MQTT_PORT = 1883
-MQTT_TOPIC = "meu_esp32_c3_supermini/comandos"
-
-mqtt_client = mqtt.Client()
-mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
-mqtt_client.loop_start()
-# -------------------------
-
 app = Flask(__name__, template_folder='.', static_folder='.', static_url_path='')
 
 SENHA_MESTRE = "5555"
 sistema_desbloqueado = False
+
+# Variáveis para espelhar o status do mundo físico
+esp_ligado = False
+esp_minutos = 10
+esp_segundos = 0
+
+# --- CONFIGURAÇÃO MQTT ---
+MQTT_BROKER = "broker.hivemq.com"
+MQTT_PORT = 1883
+MQTT_TOPIC_COMANDOS = "meu_esp32_c3_supermini/comandos"
+MQTT_TOPIC_STATUS = "meu_esp32_c3_supermini/status" # Novo tópico que o ESP vai enviar
+
+def on_connect(client, userdata, flags, rc):
+    print("[MQTT] Conectado ao Broker!")
+    client.subscribe(MQTT_TOPIC_STATUS)
+
+def on_message(client, userdata, msg):
+    global sistema_desbloqueado, esp_ligado, esp_minutos, esp_segundos
+    payload = msg.payload.decode('utf-8')
+    
+    # Se recebeu uma mensagem de STATUS do ESP32
+    # Formato esperado: STATUS 1 1 09 59 (Desbloqueado, Ligado, 9 min, 59 seg)
+    if payload.startswith("STATUS"):
+        partes = payload.split()
+        if len(partes) == 5:
+            # Atualiza o Python de acordo com o que o ESP32 informou
+            sistema_desbloqueado = (partes[1] == '1')
+            esp_ligado = (partes[2] == '1')
+            esp_minutos = int(partes[3])
+            esp_segundos = int(partes[4])
+
+mqtt_client = mqtt.Client()
+mqtt_client.on_connect = on_connect
+mqtt_client.on_message = on_message
+mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+mqtt_client.loop_start()
+# -------------------------
 
 @app.route('/')
 def index():
@@ -24,101 +50,72 @@ def index():
         return render_template('painel.html')
     return render_template('index.html')
 
+# --- NOVA ROTA PARA O SITE CONSULTAR O STATUS REAL ---
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    return jsonify({
+        "desbloqueado": sistema_desbloqueado,
+        "ligado": esp_ligado,
+        "minutos": esp_minutos,
+        "segundos": esp_segundos
+    })
+
 @app.route('/validar_senha', methods=['POST'])
 def validar_senha():
     global sistema_desbloqueado
     dados = request.get_json()
     if dados.get('senha') == SENHA_MESTRE:
         sistema_desbloqueado = True
-        
-        # --- NOVO: Avisa o ESP32 para desbloquear o ecrã OLED ---
-        mqtt_client.publish(MQTT_TOPIC, "DESBLOQUEAR")
-        # --------------------------------------------------------
-        
+        mqtt_client.publish(MQTT_TOPIC_COMANDOS, "DESBLOQUEAR")
         return jsonify({"status": "sucesso"})
     return jsonify({"status": "erro"}), 401
 
 @app.route('/painel')
 def painel():
     if not sistema_desbloqueado:
-        return render_template('index.html') # Se não tiver logado, joga pro index
+        return render_template('index.html')
     return render_template('painel.html')
-
-# --- NOVAS ROTAS DA API DE CONTROLE ---
 
 @app.route('/api/ligar', methods=['POST'])
 def api_ligar():
     global sistema_desbloqueado
     if not sistema_desbloqueado: return "Acesso Negado", 403
-    
     dados = request.get_json()
-    minutos = dados.get('minutos')
-    segundos = dados.get('segundos')
-    print(f"[COMANDO] Ligar relé por {minutos} min e {segundos} seg.")
-    # No futuro, aqui vai o código MQTT que envia a mensagem pro ESP32
-    mqtt_client.publish(MQTT_TOPIC, f"LIGAR {minutos} {segundos}")
+    min = dados.get('minutos')
+    sec = dados.get('segundos')
+    mqtt_client.publish(MQTT_TOPIC_COMANDOS, f"LIGAR {min} {sec}")
     return jsonify({"status": "ligado"})
 
 @app.route('/api/desligar', methods=['POST'])
 def api_desligar():
     global sistema_desbloqueado
     if not sistema_desbloqueado: return "Acesso Negado", 403
-    
-    print("[COMANDO] Desligar relé.")
-    # No futuro, aqui vai o código MQTT que manda o ESP32 parar
-    mqtt_client.publish(MQTT_TOPIC, "DESLIGAR")
+    mqtt_client.publish(MQTT_TOPIC_COMANDOS, "DESLIGAR")
     return jsonify({"status": "desligado"})
 
 @app.route('/api/bloquear', methods=['POST'])
 def api_bloquear():
     global sistema_desbloqueado
     dados = request.get_json()
-    senha_digitada = dados.get('senha')
-
-    # Confere se a senha para bloquear é a mesma
-    if senha_digitada == SENHA_MESTRE:
+    if dados.get('senha') == SENHA_MESTRE:
         sistema_desbloqueado = False
-        print("[SISTEMA] Sistema Bloqueado.")
-        
-        # --- NOVO: Avisa o ESP32 para trancar o ecrã OLED ---
-        mqtt_client.publish(MQTT_TOPIC, "BLOQUEAR")
-        # ----------------------------------------------------
-        
+        mqtt_client.publish(MQTT_TOPIC_COMANDOS, "BLOQUEAR")
         return jsonify({"status": "sucesso"})
-    else:
-        return jsonify({"status": "erro", "mensagem": "Senha Incorreta"}), 401
+    return jsonify({"status": "erro", "mensagem": "Senha Incorreta"}), 401
 
 @app.route('/api/alterar_senha', methods=['POST'])
 def api_alterar_senha():
-    # Precisamos da instrução "global" para conseguir alterar a variável original
     global SENHA_MESTRE, sistema_desbloqueado
-    
-    if not sistema_desbloqueado:
-        return jsonify({"status": "erro", "mensagem": "Acesso Negado"}), 403
-
+    if not sistema_desbloqueado: return jsonify({"status": "erro"}), 403
     dados = request.get_json(silent=True)
-    if not dados:
-        return jsonify({"status": "erro", "mensagem": "Dados inválidos"}), 400
-
     senha_atual = dados.get('senha_atual')
     nova_senha = dados.get('nova_senha')
 
-    # Validações de segurança
     if senha_atual != SENHA_MESTRE:
         return jsonify({"status": "erro", "mensagem": "Senha atual incorreta."}), 401
     
-    if len(nova_senha) != 4 or not nova_senha.isdigit():
-        return jsonify({"status": "erro", "mensagem": "A nova senha deve ter 4 dígitos numéricos."}), 400
-
-    # Atualiza a senha no sistema
     SENHA_MESTRE = nova_senha
-    print(f"[SISTEMA] Senha mestre alterada para: {SENHA_MESTRE}")
-    
-    # --- ADICIONE ESTA LINHA PARA AVISAR A ESP32 ---
-    mqtt_client.publish(MQTT_TOPIC, f"SENHA {SENHA_MESTRE}")
-    # -----------------------------------------------
-
-    return jsonify({"status": "sucesso"})
+    mqtt_client.publish(MQTT_TOPIC_COMANDOS, f"SENHA {SENHA_MESTRE}")
     return jsonify({"status": "sucesso"})
 
 if __name__ == '__main__':
