@@ -1,6 +1,8 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <WiFiManager.h>    
+#include <PubSubClient.h> 
 
 #define sw 0
 #define dt 1
@@ -13,7 +15,15 @@
 #define led 8
 #define rele 9
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
+// --- CONFIGURAÇÕES MQTT ---
+const char* mqtt_broker = "broker.hivemq.com";
+const int mqtt_port = 1883;
+const char* topic_comandos = "meu_esp32_c3_supermini/comandos";
 
+WiFiClient espClient;
+PubSubClient client(espClient);
+unsigned long ultimoTentoMQTT = 0;
+// --------------------------
 int senha[4] = {0, 0, 0, 0};
 int senhaCorreta = 0;
 int errouSenha = 0;
@@ -94,6 +104,49 @@ void desenharTela() {
   display.display();
 }
 
+// --- FUNÇÃO QUE RECEBE COMANDOS DA WEB ---
+void callback(char* topic, byte* payload, unsigned int length) {
+  String msg;
+  for (int i = 0; i < length; i++) {
+    msg += (char)payload[i];
+  }
+  
+  if (msg.startsWith("LIGAR")) {
+    int espaco1 = msg.indexOf(' ');
+    int espaco2 = msg.lastIndexOf(' ');
+    if (espaco1 != -1 && espaco2 != -1 && espaco1 != espaco2) {
+      minutos = msg.substring(espaco1 + 1, espaco2).toInt();
+      segundos = msg.substring(espaco2 + 1).toInt();
+      
+      senhaCorreta = 1; // Desbloqueia a tela física
+      estadoLigado = 1; // Liga o relé
+      tempoSegundosAnterior = millis();
+      digitalWrite(rele, HIGH);
+      desenharTela();
+    }
+  } else if (msg == "DESLIGAR") {
+    estadoLigado = 0;
+    minutos = 10;
+    segundos = 0;
+    digitalWrite(rele, LOW);
+    digitalWrite(led, LOW);
+    digitalWrite(buzzer, LOW);
+    desenharTela();
+  }
+}
+
+// --- FUNÇÃO PARA CONECTAR NO MQTT SEM TRAVAR O CÓDIGO ---
+void conectarMQTT() {
+  if (millis() - ultimoTentoMQTT > 5000) {
+    if (client.connect("ESP32_C3_TimerClient")) {
+      client.subscribe(topic_comandos);
+    }
+    ultimoTentoMQTT = millis();
+  }
+}
+
+
+
 void setup() {
   Wire.begin(i2c_sda, i2c_scl);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
@@ -107,9 +160,25 @@ void setup() {
   pinMode(led, OUTPUT);
   estadoUltimoCLK = digitalRead(clk);
   desenharTela();
+
+  // --- CONFIGURAÇÃO WI-FI E MQTT ---
+  WiFiManager wm;
+  // wm.resetSettings(); // Descomente esta linha se precisar apagar a senha do Wi-Fi salva
+  wm.autoConnect("ESP32_Config");
+  
+  client.setServer(mqtt_broker, mqtt_port);
+  client.setCallback(callback);
 }
 
 void loop() {
+
+  // --- MANTER CONEXÃO WEB ATIVA ---
+  if (!client.connected()) {
+    conectarMQTT();
+  }
+  client.loop();
+  // --------------------------------
+  
   int estadoAtualBotao = digitalRead(sw);
 
   if (estadoAtualBotao != estadoAnteriorBotao) {
