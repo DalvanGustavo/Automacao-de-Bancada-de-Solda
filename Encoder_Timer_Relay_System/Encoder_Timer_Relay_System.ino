@@ -15,6 +15,7 @@
 #define led 8
 #define rele 9
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
+
 // --- CONFIGURAÇÕES MQTT ---
 const char* mqtt_broker = "broker.hivemq.com";
 const int mqtt_port = 1883;
@@ -24,10 +25,14 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long ultimoTentoMQTT = 0;
 // --------------------------
-int senha[4] = {0, 0, 0, 0};
+
+// --- VARIÁVEIS DE SENHA E TEMPO ---
+int senha[4] = {0, 0, 0, 0};          // Guarda o que está sendo digitado no hardware
+int senhaMestra[4] = {5, 5, 5, 5};    // A senha real do sistema (pode ser alterada via site)
 int senhaCorreta = 0;
 int errouSenha = 0;
 int estadoSenha = 0;
+
 int minutos = 10;
 int segundos = 0;
 int estado = 0;
@@ -52,16 +57,14 @@ void desenharTela() {
     if(errouSenha == 0){
       display.print("Informe a Senha");
       
-      char senhaFormatada[16]; // Cria um espaço na memória para o texto
-      sprintf(senhaFormatada, "%d %d %d %d", senha[0], senha[1], senha[2], senha[3]); // Junta as variáveis no formato
+      char senhaFormatada[16]; 
+      sprintf(senhaFormatada, "%d %d %d %d", senha[0], senha[1], senha[2], senha[3]); 
       
-      // Exibir formato de relógio
       display.setTextSize(2);
       display.setCursor(15, 20);
       display.print(senhaFormatada);
 
-      // Desenhar linha de seleção
-      int alturaLinha = 40; // Subi um pouco a linha para ficar colada no número (tamanho 2 é menor que 3)
+      int alturaLinha = 40; 
       int xInicio = 15 + (estadoSenha * 24); 
       display.drawLine(xInicio, alturaLinha, xInicio + 10, alturaLinha, SSD1306_WHITE);
     }else{
@@ -83,15 +86,13 @@ void desenharTela() {
     }else{
       display.print("Ligado...");
     }
-    char tempoFormatado[6]; // Cria um espaço na memória para o texto
-    sprintf(tempoFormatado, "%02d:%02d", minutos, segundos); // Junta as variáveis no formato
+    char tempoFormatado[6]; 
+    sprintf(tempoFormatado, "%02d:%02d", minutos, segundos); 
     
-    // Exibir formato de relógio
     display.setTextSize(3);
     display.setCursor(15, 20);
     display.print(tempoFormatado);
 
-    // Desenhar linha de seleção
     int alturaLinha = 45;
     if(estadoLigado == 0){
       if(estado == 0) {
@@ -111,6 +112,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     msg += (char)payload[i];
   }
   
+  // Se o comando for para LIGAR e atualizar o TEMPO
   if (msg.startsWith("LIGAR")) {
     int espaco1 = msg.indexOf(' ');
     int espaco2 = msg.lastIndexOf(' ');
@@ -124,7 +126,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
       digitalWrite(rele, HIGH);
       desenharTela();
     }
-  } else if (msg == "DESLIGAR") {
+  } 
+  // Se o comando for para DESLIGAR
+  else if (msg == "DESLIGAR") {
     estadoLigado = 0;
     minutos = 10;
     segundos = 0;
@@ -132,6 +136,18 @@ void callback(char* topic, byte* payload, unsigned int length) {
     digitalWrite(led, LOW);
     digitalWrite(buzzer, LOW);
     desenharTela();
+  }
+  // Se o comando for para atualizar a SENHA (Ex: "SENHA 1234")
+  else if (msg.startsWith("SENHA ")) {
+    String novaSenha = msg.substring(6); // Pega os 4 dígitos
+    if(novaSenha.length() >= 4) {
+      senhaMestra[0] = novaSenha.charAt(0) - '0';
+      senhaMestra[1] = novaSenha.charAt(1) - '0';
+      senhaMestra[2] = novaSenha.charAt(2) - '0';
+      senhaMestra[3] = novaSenha.charAt(3) - '0';
+      Serial.print("Nova senha mestra definida via MQTT: ");
+      Serial.println(novaSenha);
+    }
   }
 }
 
@@ -145,9 +161,8 @@ void conectarMQTT() {
   }
 }
 
-
-
 void setup() {
+  Serial.begin(115200); // Adicionado para debugar no monitor serial
   Wire.begin(i2c_sda, i2c_scl);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
     for(;;);
@@ -163,7 +178,6 @@ void setup() {
 
   // --- CONFIGURAÇÃO WI-FI E MQTT ---
   WiFiManager wm;
-  // wm.resetSettings(); // Descomente esta linha se precisar apagar a senha do Wi-Fi salva
   wm.autoConnect("ESP32_Config");
   
   client.setServer(mqtt_broker, mqtt_port);
@@ -191,7 +205,8 @@ void loop() {
       unsigned long tempoPressionado = millis() - tempoInicioClique;
       if(senhaCorreta == 0){
         if(tempoPressionado >= 5000){
-          if(senha[0] == 5 && senha[1] == 5 && senha[2] == 5 && senha[3] == 5){
+          // Verifica se o que foi digitado bate com a SENHA MESTRA atual
+          if(senha[0] == senhaMestra[0] && senha[1] == senhaMestra[1] && senha[2] == senhaMestra[2] && senha[3] == senhaMestra[3]){
             senhaCorreta = 1;
           }
           else{
@@ -251,7 +266,7 @@ void loop() {
         if(senha[estadoSenha] < 0) senha[estadoSenha] = 9;
         ultimoTempoGiro = millis();
       }
-      delay(100);
+      delay(10); // Reduzido para melhorar o MQTT
       desenharTela();
     }
     estadoUltimoCLK = estadoAtualCLK;
@@ -277,7 +292,7 @@ void loop() {
             if(segundos < 0) segundos = 59;
           }
           ultimoTempoGiro = millis();
-          delay(100);
+          delay(10); // Reduzido para melhorar o MQTT
           desenharTela();
         }
       }
