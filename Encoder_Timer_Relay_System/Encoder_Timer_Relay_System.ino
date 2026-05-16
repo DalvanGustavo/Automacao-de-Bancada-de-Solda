@@ -18,7 +18,7 @@ int senha[4] = {0, 0, 0, 0};
 int senhaCorreta = 0;
 int errouSenha = 0;
 int estadoSenha = 0;
-int minutos = 0;
+int minutos = 10;
 int segundos = 0;
 int estado = 0;
 int estadoLigado = 0;
@@ -145,7 +145,7 @@ void loop() {
           desenharTela();
         }
       }
-
+      delay(50);
       //Senha confirmada
       else if(senhaCorreta == 1){
         if(tempoPressionado >= 10000){
